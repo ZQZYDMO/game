@@ -106,8 +106,8 @@ game.MyStates.boot = {
         //判断是否在手机端，如果是在手机端，就全屏拉伸
         // if (!game.device.desktop) {
         //设定缩放方式
-        game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
-        // game.scale.scaleMode = Phaser.ScaleManager.EXACT_FIT;
+        // game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
+        game.scale.scaleMode = Phaser.ScaleManager.EXACT_FIT;
         // }
 
         if (game.scale.isLandscape) {
@@ -273,7 +273,7 @@ game.MyStates.start = {
 game.MyStates.play = {
     /*-----------------------默认基本运行函数----------------------------*/
     create: function () {
-        console.log(game.init.m_planeSpeed)
+        game.init.isStart = false;
         //开启游戏世界中的碰撞
         game.physics.startSystem(Phaser.Physics.ARCADE);
         //加载发射子弹时的声音
@@ -355,7 +355,7 @@ game.MyStates.play = {
             name: 'boundary',
             type: 'boundarys',
             width: 0,
-            height: 10,
+            height: -50,
             scaleX: WIDTH,
             scaleY: 1,
             isCheckWorldKill: false
@@ -363,7 +363,7 @@ game.MyStates.play = {
             name: 'boundary',
             type: 'boundarys',
             width: 0,
-            height: HEIGHT - 10,
+            height: HEIGHT +15,
             scaleX: WIDTH,
             scaleY: 1,
             isCheckWorldKill: false
@@ -858,7 +858,6 @@ game.MyStates.over = {
         game.getObj.call(this);
         game.init.score = 0;
         game.init.m_planeSpeed = 3;
-
     },//创建分数相关内容
     update: function () {
     },
