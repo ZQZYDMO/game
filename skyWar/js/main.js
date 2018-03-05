@@ -1,9 +1,15 @@
 /**
  * Created by ZQZYDMO on 2017/10/8.
+ * 有小bug如下
+ * 在飞机下坠到屏幕下半屏的时候,飞机有一定几率莫名炸毁
+ * 飞机发射的炮弹与敌机的碰撞检测暂时没有解决
  */
 
+var WIDTH = 1920;
+var HEIGHT = 1080;
+
 //创建游戏对象，并且设定分辨率，指定渲染器，绑定到div
-var game = new Phaser.Game(1280, 720, Phaser.CANVAS, 'game_view');
+var game = new Phaser.Game(WIDTH, HEIGHT, Phaser.CANVAS, 'game_view');
 
 Phaser.World.prototype.displayObjectUpdateTransform = function () {
     if (!game.scale.correct) {
@@ -25,16 +31,21 @@ game.init = {
     scoreDelayed: 2 * 1000,//坚持多长时间加一分，秒记
     isStart: false,//游戏是否开始
     BGSpeed: -100,//背景速度
-    rocketTime: 0.4 * 1000,//飞机子弹发射间隔,秒记
+    rocketTime: 1 * 1000,//飞机子弹发射间隔,秒记
     obstacleTime: 4 * 1000,//障碍出现时间间隔,秒记
-    enemyTime: 5 * 1000,//敌机出现时间间隔,秒记
-    m_planeRocketSpeed: 300,//飞机发射的炮弹的速度
-    m_enemy1Speed: -200,//敌机飞行速度
-    m_enemy2Speed: -175,//敌机飞行速度
-    m_enemy3Speed: -150,//敌机飞行速度
-    m_enemy2RocketSpeed: -262,//敌机飞行速度
-    m_enemy3RocketSpeed: -225,//敌机飞行速度
+    enemyTime: 3 * 1000,//敌机出现时间间隔,秒记
+    m_planeRocketSpeed: 100,//飞机发射的炮弹的速度
+    m_enemy1Speed: -700,//敌机飞行速度
+    m_enemy2Speed: -375,//敌机飞行速度
+    m_enemy3Speed: -450,//敌机飞行速度
+    // m_enemy1Speed: -400,//敌机飞行速度
+    // m_enemy2Speed: -175,//敌机飞行速度
+    // m_enemy3Speed: -150,//敌机飞行速度
+    m_enemy2RocketSpeed: -1200,//敌机子弹飞行速度
+    m_enemy3RocketSpeed: -800,//敌机子弹速度
     m_enemy3Life: 2,//第三种敌机有两条命
+    m_planeSpeed: 3,//飞机下坠初始速度
+    m_planeGRatio:0.2//飞机下坠加速度
 };
 game.setIntScore = null;//后边赋值计分函数
 /*--------------------一些初始方法---------------------*/
@@ -85,30 +96,40 @@ game.makeTitle = function (score) {
 game.onCloseShare = function () {
     document.getElementById('share').style.display = 'none';
 };
-
 /*-------------------定义常量结束------------------*/
 game.MyStates = {};
 //最一开始加载的场景,引导场景，用来加载一些比较微小的提示类消息
 game.MyStates.boot = {
     preload: function () {
+        game.scale.pageAlignHorizontally = true;
+        game.scale.pageAlignVertically = true;
+        //判断是否在手机端，如果是在手机端，就全屏拉伸
+        // if (!game.device.desktop) {
+        //设定缩放方式
+        game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
+        // game.scale.scaleMode = Phaser.ScaleManager.EXACT_FIT;
+        // }
+
+        if (game.scale.isLandscape) {
+            game.scale.correct = true;
+            game.scale.setGameSize(WIDTH, HEIGHT);
+        } else {
+            game.scale.correct = false;
+            game.scale.setGameSize(HEIGHT, WIDTH);
+        }
+        //导入最初加载进度条
+        game.load.image('preload', 'assets/other/preloader.gif');
+    },
+    create: function () {
         game.scale.onOrientationChange.add(function () {
             if (game.scale.isLandscape) {
                 game.scale.correct = true;
-                game.scale.setGameSize(1280, 720);
+                game.scale.setGameSize(WIDTH, HEIGHT);
             } else {
                 game.scale.correct = false;
-                game.scale.setGameSize(720, 1280);
+                game.scale.setGameSize(HEIGHT, WIDTH);
             }
         }, this);
-        //导入最初加载进度条
-        game.load.image('preload', 'assets/other/preloader.gif');
-        //判断是否在手机端，如果是在手机端，就全屏拉伸
-        if (!game.device.desktop) {
-            //设定缩放方式
-            game.scale.scaleMode = Phaser.ScaleManager.EXACT_FIT;
-        }
-    },
-    create: function () {
         //跳转到加载资源场景
         game.state.start('load');
     }
@@ -120,7 +141,7 @@ game.MyStates.load = {
     preload: function () {
         /*定义读取进度的文字*/
         //首先定义文字(x位置，y位置，内容)
-        this.prelodeText = game.add.text(game.world.centerX, game.world.centerY - 20, '0%');
+        this.prelodeText = game.add.text(WIDTH / 2, HEIGHT / 2, '0%');
         //设置中心点
         this.prelodeText.anchor.set(0.5);
         //居中
@@ -147,7 +168,7 @@ game.MyStates.load = {
             this.prelodeText.text = process + '%';
         }, this);
         /*加载上边资源，然后场景中加载*/
-        var preloadSprite = game.add.sprite(game.width / 2 - 220 / 2, game.height / 2 - 19 / 2, 'preload');
+        var preloadSprite = game.add.sprite(WIDTH / 2 - 100, HEIGHT / 2 + 30, 'preload');
         //preloadSprite.anchor.setTo(0.5, 0.5);
         //preloadSprite.angle = 45;
         /*获取加载进度，设置加载精灵*/
@@ -239,7 +260,7 @@ game.MyStates.start = {
     },//创建背景音乐
     createPlane: function () {
         //加载飞机
-        var m_plane = game.add.sprite(game.width / 2 - 200, game.height / 2, 'Plane_start');
+        var m_plane = game.add.sprite(WIDTH / 2 - 100, HEIGHT / 2, 'Plane_start');
         //设置飞机动画
         m_plane.animations.add('fly');
         //播放飞机动画
@@ -252,6 +273,7 @@ game.MyStates.start = {
 game.MyStates.play = {
     /*-----------------------默认基本运行函数----------------------------*/
     create: function () {
+        console.log(game.init.m_planeSpeed)
         //开启游戏世界中的碰撞
         game.physics.startSystem(Phaser.Physics.ARCADE);
         //加载发射子弹时的声音
@@ -291,14 +313,19 @@ game.MyStates.play = {
         //游戏开始
         game.init.isStart = true;
         //设置飞机的重力,或者说下降速度
-        this.m_plane.body.velocity.y = 300;
+        // this.m_plane.body.velocity.y = 300;
+        // this.m_plane.y -= 3;
         //如果手触摸屏幕并按下，或者鼠标点击，执行函数
         game.input.onDown.add(function () {
-            this.m_plane.body.velocity.y = -200;
+            // this.m_plane.body.velocity.y = -200;
+            game.init.m_planeSpeed = 3;
+            game.init.m_planeSpeed = -game.init.m_planeSpeed;
         }, this);
-        //如果手触摸屏幕并按下，或者鼠标点击，执行函数
+        //如果手触摸屏幕并抬起，或者鼠标点击，执行函数
         game.input.onUp.add(function () {
-            this.m_plane.body.velocity.y = 300;
+            // this.m_plane.body.velocity.y = 300;
+            game.init.m_planeSpeed = 3;
+            game.init.m_planeSpeed = Math.abs(game.init.m_planeSpeed);
         }, this);
         //算分函数
         game.setIntScore = setInterval(function () {
@@ -311,11 +338,11 @@ game.MyStates.play = {
     /*-------------------------创建加载游戏世界元素----------------------------*/
     createScene: function () {
         //使用平铺方式加载背景图
-        this.background = game.add.tileSprite(0, 0, game.width, game.height, 'background');
+        this.background = game.add.tileSprite(0, 0, WIDTH, HEIGHT, 'background');
         //让背景图自动移动
         this.background.autoScroll(game.init.BGSpeed, 0);
         //创建分数
-        this.scoreBG = game.add.sprite(game.width - 200, 20, 'score');
+        this.scoreBG = game.add.sprite(WIDTH - 200, 20, 'score');
         //设置分数大小
         this.scoreBG.scale.setTo(0.7, 0.7);
     },//创建游戏场景(不带交互的)
@@ -328,16 +355,16 @@ game.MyStates.play = {
             name: 'boundary',
             type: 'boundarys',
             width: 0,
-            height: -50,
-            scaleX: game.width,
+            height: 10,
+            scaleX: WIDTH,
             scaleY: 1,
             isCheckWorldKill: false
         }, {
             name: 'boundary',
             type: 'boundarys',
             width: 0,
-            height: game.height + 30,
-            scaleX: game.width,
+            height: HEIGHT - 10,
+            scaleX: WIDTH,
             scaleY: 1,
             isCheckWorldKill: false
         }];
@@ -351,11 +378,12 @@ game.MyStates.play = {
     },//创建背景音乐
     createPlane: function () {
         //加载飞机
-        this.m_plane = game.add.sprite(game.width / 2 - 180, game.height / 2 + 70, 'Plane');
+        this.m_plane = game.add.sprite(WIDTH / 2 - 100, HEIGHT / 2, 'Plane');
         //设置精灵缩放(飞机大小)
         this.m_plane.scale.setTo(0.5, 0.5);
+        this.m_plane.isOver = false;
         //给飞机添加碰撞
-        game.physics.arcade.enable(this.m_plane);
+        // game.physics.arcade.enable(this.m_plane);
         //设置飞机边界碰撞时不超出
         //this.m_plane.body.collideWorldBounds = true;
         //设置飞机边界碰撞检测
@@ -378,11 +406,12 @@ game.MyStates.play = {
             var m_obj, m_enemy, m_enemyRocket;
             //随机生成敌机
             switch (game.selectFrom(0, 3)) {
+                // switch (2) {
                 case 0:
                     this.Obj = [{
                         name: 'enemy1',
                         type: 'm_Enemy1s',
-                        width: game.width,
+                        width: WIDTH,
                         height: game.selectFrom(50, 650),
                         scaleX: game.selectFrom(20, 27) / 100,
                         scaleY: game.selectFrom(20, 27) / 100,
@@ -394,7 +423,7 @@ game.MyStates.play = {
                     this.Obj.push({
                         name: 'enemy2',
                         type: 'm_Enemy2s',
-                        width: game.width,
+                        width: WIDTH,
                         height: game.selectFrom(50, 650),
                         scaleX: game.selectFrom(20, 29) / 100,
                         scaleY: game.selectFrom(20, 29) / 100,
@@ -416,7 +445,7 @@ game.MyStates.play = {
                     this.Obj.push({
                         name: 'enemy3',
                         type: 'm_Enemy3s',
-                        width: game.width,
+                        width: WIDTH,
                         height: game.selectFrom(50, 650),
                         scaleX: game.selectFrom(20, 31) / 100,
                         scaleY: game.selectFrom(20, 31) / 100,
@@ -440,10 +469,28 @@ game.MyStates.play = {
             m_obj = game.getObj.call(this);
             //设置敌机的运动方向即敌机速度
             m_obj[0].body.velocity.x = this.Obj[0].speed;
+            m_obj[0].isOver = false;
+            m_obj[0].checkOverlap = function () {
+                console.log(this.isOver);
+                if (!this.isOver && game.MyStates.play.m_Rockets) {
+                    console.log(1)
+                    for (var j = 0; j < game.MyStates.play.m_Rockets.length; j++) {
+                        if (!game.MyStates.play.m_Rockets.children[j].isOver) {
+                            console.log(game.MyStates.play.m_Rockets.children[j].isOver);
+                            // 检测是否相交
+                            if (Phaser.Rectangle.intersects(this.getBounds(), game.MyStates.play.m_Rockets.children[j].getBounds())) {
+                                game.MyStates.play.enemyExplode(game.MyStates.play.m_Rockets.children[j], this);
+                                break;
+                            }
+                        }
+                    }
+                }
+            };
             if (m_obj[1]) {
                 m_obj[1].body.velocity.x = this.Obj[1].speed;
                 if (this.Obj[1].name == 'enemyBullet1') {
                     m_obj[1].body.velocity.y = (m_obj[1].position.y - this.m_plane.position.y) / ((m_obj[1].position.x - this.m_plane.position.x) / this.Obj[1].speed);
+                    m_obj[1].angle = Math.atan(m_obj[1].body.velocity.y / m_obj[1].body.velocity.x) * 180 / Math.PI;
                 } else {
                     m_obj[0].life = game.init.m_enemy3Life;
                 }
@@ -467,8 +514,8 @@ game.MyStates.play = {
                 case 0:
                     this.Obj = [{
                         name: 'obstacle1',
-                        width: game.width,
-                        height: game.selectFrom(0, 250),
+                        width: WIDTH,
+                        height: game.selectFrom(0, HEIGHT / 7 * 3),
                         scaleX: game.selectFrom(30, 50) / 100,
                         scaleY: game.selectFrom(30, 50) / 100,
                         type: 'm_Obstacle1s',
@@ -478,8 +525,8 @@ game.MyStates.play = {
                 case 1:
                     this.Obj = [{
                         name: 'obstacle2',
-                        width: game.width,
-                        height: game.selectFrom(350, 550),
+                        width: WIDTH,
+                        height: game.selectFrom(HEIGHT / 7 * 4, 550),
                         scaleX: game.selectFrom(50, 100) / 100,
                         scaleY: game.selectFrom(50, 100) / 100,
                         type: 'm_Obstacle2s',
@@ -515,6 +562,7 @@ game.MyStates.play = {
             var m_Rocket = game.getObj.call(this)[0];
             //设置子弹的运动方向即子弹速度
             m_Rocket.body.velocity.x += game.init.m_planeRocketSpeed;
+            m_Rocket.isOver = false;
             //最后一次发射子弹时间赋值
             this.m_plane.lastRocketTime = now;
             //尝试播放播放声音，就算出错只会抛出异常，不会影响游戏继续
@@ -539,7 +587,7 @@ game.MyStates.play = {
         for (var i = 0; i < this.scoreArr.length; i++) {
             this.Obj.push({
                 name: 's' + this.scoreArr[i],
-                width: (game.width - 90) + i * 18,
+                width: (WIDTH - 90) + i * 18,
                 height: 25,
                 scaleX: 0.3,
                 scaleY: 0.3,
@@ -551,43 +599,111 @@ game.MyStates.play = {
     },//将分数转换为图片显示
     /*-------------------------逻辑函数----------------------------*/
     update: function () {
-        //由于固定速度看起来感觉不好，所以当判断鼠标按下或者抬起的时候，改为匀加速下降或者上升
-        if (game.input.activePointer.isDown) {
-            this.m_plane.body.velocity.y -= 3;
+        if (!game.init.isStart) {
+            return;
         }
-        //由于固定速度看起来感觉不好，所以当判断鼠标按下或者抬起的时候，改为匀加速下降或者上升
-        if (game.input.activePointer.isUp) {
-            this.m_plane.body.velocity.y += 3;
+        if (game.init.m_planeSpeed <= 0) {
+            game.init.m_planeSpeed -= game.init.m_planeGRatio;
+        } else {
+            game.init.m_planeSpeed += game.init.m_planeGRatio;
         }
-        //检测飞机与边界是否碰撞，如果碰撞执行函数gameOver
-        game.physics.arcade.overlap(this.m_plane, this.boundarys, this.gameOver, null, this);
-        //检测飞机与障碍物是否碰撞,如果碰撞执行函数gameOver
-        game.physics.arcade.overlap(this.m_plane, this.m_Obstacle1s, this.gameOver, null, this);
-        game.physics.arcade.overlap(this.m_plane, this.m_Obstacle2s, this.gameOver, null, this);
-        //检测飞机与敌机是否相撞,如果碰撞执行函数gameOver
-        game.physics.arcade.overlap(this.m_plane, this.m_Enemy1s, this.gameOver, null, this);
-        game.physics.arcade.overlap(this.m_plane, this.m_Enemy2s, this.gameOver, null, this);
-        game.physics.arcade.overlap(this.m_plane, this.m_Enemy3s, this.gameOver, null, this);
-        //检测敌机是否与炮弹发生碰撞
-        game.physics.arcade.overlap(this.m_plane, this.m_Enemy2Rockets, this.gameOver, null, this);
-        game.physics.arcade.overlap(this.m_plane, this.m_Enemy3Rockets, this.gameOver, null, this);
-        //检测炮弹与敌机碰撞,如果碰撞销毁敌机
-        game.physics.arcade.overlap(this.m_Rockets, this.m_Enemy1s, this.enemyExplode, null, this);
-        game.physics.arcade.overlap(this.m_Rockets, this.m_Enemy2s, this.enemyExplode, null, this);
-        game.physics.arcade.overlap(this.m_Rockets, this.m_Enemy3s, this.enemyExplode, null, this);
+        this.m_plane.y += game.init.m_planeSpeed;
+        //由于固定速度看起来感觉不好，所以当判断鼠标按下或者抬起的时候，改为匀加速下降或者上升
+        // if (game.input.activePointer.isDown) {
+        //     this.m_plane.body.velocity.y -= 3;
+        // }
+        // //由于固定速度看起来感觉不好，所以当判断鼠标按下或者抬起的时候，改为匀加速下降或者上升
+        // if (game.input.activePointer.isUp) {
+        //     this.m_plane.body.velocity.y += 3;
+        // }
+        // //检测飞机与边界是否碰撞，如果碰撞执行函数gameOver
+        // game.physics.arcade.overlap(this.m_plane, this.boundarys, this.gameOver, null, this);
+        // //检测飞机与障碍物是否碰撞,如果碰撞执行函数gameOver
+        // game.physics.arcade.overlap(this.m_plane, this.m_Obstacle1s, this.gameOver, null, this);
+        // game.physics.arcade.overlap(this.m_plane, this.m_Obstacle2s, this.gameOver, null, this);
+        // //检测飞机与敌机是否相撞,如果碰撞执行函数gameOver
+        // game.physics.arcade.overlap(this.m_plane, this.m_Enemy1s, this.gameOver, null, this);
+        // game.physics.arcade.overlap(this.m_plane, this.m_Enemy2s, this.gameOver, null, this);
+        // game.physics.arcade.overlap(this.m_plane, this.m_Enemy3s, this.gameOver, null, this);
+        // //检测敌机是否与炮弹发生碰撞
+        // game.physics.arcade.overlap(this.m_plane, this.m_Enemy2Rockets, this.gameOver, null, this);
+        // game.physics.arcade.overlap(this.m_plane, this.m_Enemy3Rockets, this.gameOver, null, this);
+        // //检测炮弹与敌机碰撞,如果碰撞销毁敌机
+        // game.physics.arcade.overlap(this.m_Rockets, this.m_Enemy1s, this.enemyExplode, null, this);
+        // game.physics.arcade.overlap(this.m_Rockets, this.m_Enemy2s, this.enemyExplode, null, this);
+        // game.physics.arcade.overlap(this.m_Rockets, this.m_Enemy3s, this.enemyExplode, null, this);
         //如果游戏已经开始
-        if (game.init.isStart) {
-            //飞机发射子弹
-            this.planeRocket();
-            //创建障碍物
-            this.createObstacle();
-            //创建敌机
-            this.createEnemy();
-        }
+
+        //飞机发射子弹
+        // this.planeRocket();
+        //创建障碍物
+        this.createObstacle();
+        //创建敌机
+        this.createEnemy();
+
+        this.checkPlaneOverlap(this.boundarys);
+        this.checkPlaneOverlap(this.m_Obstacle1s);
+        this.checkPlaneOverlap(this.m_Obstacle2s);
+        this.checkPlaneOverlap(this.m_Enemy1s);
+        this.checkPlaneOverlap(this.m_Enemy2s);
+        this.checkPlaneOverlap(this.m_Enemy3s);
+        this.checkPlaneOverlap(this.m_Enemy2Rockets);
+        this.checkPlaneOverlap(this.m_Enemy3Rockets);
+        // this.checkEnemyOverlap(this.m_Rockets, this.m_Enemy1s);
+        // this.checkEnemyOverlap(this.m_Rockets,this.m_Enemy2s);
+        // this.checkEnemyOverlap(this.m_Rockets, this.m_Enemy3s);
+        //直接调用组中所有元素的一个方法
+        // this.m_Enemy3s.callAll('checkOverlap');
+
     },//每帧执行
     render: function () {
         // if (this.m_plane) {
         //     game.debug.body(this.m_plane);
+        // }
+        // if (this.m_Enemy1s.children.length) {
+        //     for (var i = 0; i < this.m_Enemy1s.children.length; i++) {
+        //         game.debug.body(this.m_Enemy1s.children[i])
+        //     }
+        // }
+        // if (this.m_Enemy2s.children.length) {
+        //     for (var i = 0; i < this.m_Enemy2s.children.length; i++) {
+        //         game.debug.body(this.m_Enemy2s.children[i])
+        //     }
+        // }
+        // if (this.m_Enemy3s.children.length) {
+        //     for (var i = 0; i < this.m_Enemy3s.children.length; i++) {
+        //         game.debug.body(this.m_Enemy3s.children[i])
+        //     }
+        // }
+        // if (this.m_Obstacle1s.children.length) {
+        //     for (var i = 0; i < this.m_Obstacle1s.children.length; i++) {
+        //         game.debug.body(this.m_Obstacle1s.children[i])
+        //     }
+        // }
+        // if (this.m_Obstacle2s.children.length) {
+        //     for (var i = 0; i < this.m_Obstacle2s.children.length; i++) {
+        //         game.debug.body(this.m_Obstacle2s.children[i])
+        //     }
+        // }
+        // if (this.m_Enemy2Rockets.children.length) {
+        //     for (var i = 0; i < this.m_Enemy2Rockets.children.length; i++) {
+        //         game.debug.body(this.m_Enemy2Rockets.children[i])
+        //     }
+        // }
+        // if (this.m_Enemy3Rockets.children.length) {
+        //     for (var i = 0; i < this.m_Enemy3Rockets.children.length; i++) {
+        //         game.debug.body(this.m_Enemy3Rockets.children[i])
+        //     }
+        // }
+        // if (this.boundarys.children.length) {
+        //     for (var i = 0; i < this.boundarys.children.length; i++) {
+        //         game.debug.body(this.boundarys.children[i])
+        //     }
+        // }
+        // if (this.m_Rockets.children.length) {
+        //     for (var i = 0; i < this.m_Rockets.children.length; i++) {
+        //         game.debug.body(this.m_Rockets.children[i])
+        //     }
         // }
     },//测试等输出
     gameOver: function (plane, other) {
@@ -603,7 +719,8 @@ game.MyStates.play = {
         this.m_Enemy3s.removeAll();
         this.m_Rockets.removeAll();
         //飞机销毁
-        this.m_plane.kill();
+        this.m_plane.destroy();
+        this.m_plane.isOver = true;
         //创建爆炸动画
         var explode = game.add.sprite(this.m_plane.x + 40, this.m_plane.y + 30, 'explode');
         //设置爆炸动画
@@ -644,11 +761,14 @@ game.MyStates.play = {
     },//飞机撞上炮弹或障碍或者出界(游戏结束)
     enemyExplode: function (rocket, enemy) {
         if (enemy.life && enemy.life > 0) {
+            rocket.isOver = true;
             rocket.kill();
             enemy.life--;
             return;
         }
+        rocket.isOver = true;
         rocket.kill();
+        enemy.isOver = true;
         enemy.kill();
         //分数相加
         game.init.score++;
@@ -667,7 +787,39 @@ game.MyStates.play = {
         } catch (e) {
             console.log(e);
         }
-    }//敌机销毁
+    },//敌机销毁
+    checkEnemyOverlap: function (spriteA, spriteB) {
+        if (spriteB.length) {
+            for (var i = 0; i < spriteB.length; i++) {
+                if (!spriteB.children[i].isOver && spriteA.length) {
+                    for (var j = 0; j < spriteA.length; j++) {
+                        if (!spriteA.children[j].isOver) {
+                            console.log(spriteA.children[j].isOver)
+                            // 检测是否相交
+                            if (Phaser.Rectangle.intersects(spriteB.children[i].getBounds(), spriteA.children[j].getBounds())) {
+                                console.log(spriteB.children[i].getBounds())
+                                console.log(spriteA.children[j].getBounds())
+                                console.log('-----------------------------')
+                                this.enemyExplode(spriteA.children[j], spriteB.children[i]);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },//飞机炮弹重叠检测
+    checkPlaneOverlap: function (spriteA) {
+        if (!this.m_plane.isOver && spriteA.length) {
+            for (var i = 0; i < spriteA.length; i++) {
+                // 检测是否相交
+                if (Phaser.Rectangle.intersects(this.m_plane.getBounds(), spriteA.children[i].getBounds())) {
+                    this.gameOver(this.m_plane, spriteA.children[i]);
+                    break;
+                }
+            }
+        }
+    },//飞机重叠检测
 };
 //死亡，分数统计场景
 game.MyStates.over = {
@@ -676,13 +828,13 @@ game.MyStates.over = {
         game.MyStates.start.createMusic();
         game.add.image(0, 0, 'background_restart');
         this.createScore();
-        var share_btn = game.add.button(game.width / 2 + 100, game.height - 150, 'share_btn', this.share, this, 0, 0, 1);
+        var share_btn = game.add.button(WIDTH / 2 + 100, HEIGHT - 150, 'share_btn', this.share, this, 0, 0, 1);
         share_btn.scale.setTo(0.1, 0.1);
-        var restart_btn = game.add.button(game.width / 2 - 100, game.height - 150, 'restart_btn', this.restart, this, 0, 0, 1);
+        var restart_btn = game.add.button(WIDTH / 2 - 100, HEIGHT - 150, 'restart_btn', this.restart, this, 0, 0, 1);
         restart_btn.scale.setTo(0.6, 0.6);
     },
     createScore: function () {
-        this.scoreBG = game.add.sprite(game.width / 2 - 180, game.height / 2, 'score');
+        this.scoreBG = game.add.sprite(WIDTH / 2 - 180, HEIGHT / 2, 'score');
         this.scoreBG.scale.setTo(1.5, 1.5);
         this.m_scoreImgs = game.add.group();
         //现将分数转换为字符串
@@ -695,8 +847,8 @@ game.MyStates.over = {
         for (var i = 0; i < this.scoreArr.length; i++) {
             this.Obj.push({
                 name: 's' + this.scoreArr[i],
-                width: game.width / 2 + 110 + i * 50,
-                height: game.height / 2,
+                width: WIDTH / 2 + 110 + i * 50,
+                height: HEIGHT / 2,
                 scaleX: 0.8,
                 scaleY: 0.8,
                 type: 'm_scoreImgs',
@@ -705,6 +857,7 @@ game.MyStates.over = {
         }
         game.getObj.call(this);
         game.init.score = 0;
+        game.init.m_planeSpeed = 3;
 
     },//创建分数相关内容
     update: function () {
@@ -725,3 +878,4 @@ game.state.add('play', game.MyStates.play);
 game.state.add('over', game.MyStates.over);
 //并且指定游戏一开始进入引导场景
 game.state.start('boot');
+
